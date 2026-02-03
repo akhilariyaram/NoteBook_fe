@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini PDF Chat</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div class="app-container">
+        <div id="setup-screen">
+            <h1>Gemini PDF Chat</h1>
+            <p>Upload a document to start a secure session.</p>
+            
+            <div class="input-group">
+                <label>Select PDF Document</label>
+                <input type="file" id="pdf-file" accept=".pdf">
+            </div>
+
+            <button class="primary-btn" id="start-btn" onclick="handleUpload()">Start Chat</button>
+            <p id="status-msg"></p>
+        </div>
+
+        <div id="chat-screen" class="hidden">
+            <header>
+                <h2>Document Assistant</h2>
+                <span class="badge">Live Session</span>
+            </header>
+            
+            <div id="messages">
+                <div class="message bot-message">Hello! I've analyzed your PDF. Ask me anything about it.</div>
+                
+                <div id="loading-dots" class="typing-indicator hidden">
+                    <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+                </div>
+            </div>
+
+            <div class="input-area">
+                <div class="input-container">
+                    <input type="text" id="question-input" placeholder="Ask a question..." onkeypress="handleEnter(event)">
+                    <button class="send-btn" onclick="askQuestion()">
+                        <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const BACKEND_URL = "https://rag-jrrq.onrender.com"; 
+        
+        // 🔴 PASTE YOUR KEY HERE 
+        const HARDCODED_API_KEY = "AIzaSyAXk9PMjsu4Y7DP7CKlGJtFKING9HF1VcU"; 
+        // Example: const HARDCODED_API_KEY = "AIzaSyD-123456789...";
+
+        const SESSION_ID = "session-" + Math.random().toString(36).substring(2, 15);
+        
+        // ---------------------
+
+        const setupScreen = document.getElementById('setup-screen');
+        const chatScreen = document.getElementById('chat-screen');
+        const statusMsg = document.getElementById('status-msg');
+        const messagesDiv = document.getElementById('messages');
+        const loadingDots = document.getElementById('loading-dots');
+        const questionInput = document.getElementById('question-input');
+        const startBtn = document.getElementById('start-btn');
+
+        async function handleUpload() {
+            const fileInput = document.getElementById('pdf-file');
+
+            // 1. Check if Key is missing in code
+            if (!HARDCODED_API_KEY || HARDCODED_API_KEY === "AIzaSy...") {
+                statusMsg.style.color = "#d93025"; 
+                statusMsg.innerText = "Error: Please paste your API Key inside the index.html code.";
+                return;
+            }
+
+            // 2. Check if File is missing
+            if (!fileInput.files[0]) {
+                statusMsg.style.color = "#d93025"; 
+                statusMsg.innerText = "Please select a PDF file.";
+                return;
+            }
+
+            statusMsg.style.color = "#1a73e8"; 
+            statusMsg.innerText = "Analyzing document... (This may take 1-2 mins)";
+            startBtn.disabled = true;
+            startBtn.style.opacity = "0.7";
+
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+            formData.append("session_id", SESSION_ID);
+            
+            // 3. Send the Hardcoded Key
+            formData.append("api_key", HARDCODED_API_KEY); 
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/pdf/upload`, {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error("Upload failed. Check Server Logs.");
+
+                const resData = await response.json();
+                console.log("Upload Success:", resData);
+
+                setupScreen.classList.add('hidden');
+                chatScreen.classList.remove('hidden');
+            } catch (error) {
+                console.error(error);
+                statusMsg.style.color = "#d93025";
+                statusMsg.innerText = "Error: " + error.message;
+                startBtn.disabled = false;
+                startBtn.style.opacity = "1";
+            }
+        }
+
+        async function askQuestion() {
+            const question = questionInput.value.trim();
+            if (!question) return;
+
+            addMessage(question, 'user');
+            questionInput.value = "";
+            
+            loadingDots.classList.remove('hidden');
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/pdf/chat`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        question: question,
+                        session_id: SESSION_ID,
+                        api_key: HARDCODED_API_KEY // Send the hardcoded key here too
+                    })
+                });
+
+                const data = await response.json();
+                loadingDots.classList.add('hidden');
+                
+                if (data.answer) {
+                    addMessage(data.answer, 'bot');
+                } else {
+                    addMessage("I couldn't generate an answer.", 'bot');
+                }
+            } catch (error) {
+                loadingDots.classList.add('hidden');
+                addMessage("Connection error. Please try again.", 'bot');
+            }
+        }
+
+        function addMessage(text, sender) {
+            const div = document.createElement('div');
+            div.classList.add('message', sender === 'user' ? 'user-message' : 'bot-message');
+            
+            if (sender === 'bot') {
+                const formatted = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                      .replace(/\n/g, '<br>');
+                div.innerHTML = formatted;
+            } else {
+                div.innerText = text;
+            }
+            
+            messagesDiv.insertBefore(div, loadingDots);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function handleEnter(e) {
+            if (e.key === 'Enter') askQuestion();
+        }
+
+        window.addEventListener('beforeunload', function () {
+            const data = new FormData();
+            data.append('session_id', SESSION_ID);
+            navigator.sendBeacon(`${BACKEND_URL}/api/pdf/cleanup`, data);
+        });
+    </script>
+</body>
+</html>
