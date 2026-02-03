@@ -15,6 +15,11 @@
             <p>Upload a document to start a secure session.</p>
             
             <div class="input-group">
+                <label>Google Gemini API Key</label>
+                <input type="password" id="api-key" placeholder="Paste your AIzaSy... key here">
+            </div>
+
+            <div class="input-group">
                 <label>Select PDF Document</label>
                 <input type="file" id="pdf-file" accept=".pdf">
             </div>
@@ -49,16 +54,14 @@
     </div>
 
     <script>
-        // --- CONFIGURATION ---
+        // CONFIGURATION
+        // Local: "http://127.0.0.1:8000" | Production: "https://your-app.vercel.app"
+        // const BACKEND_URL = "http://127.0.0.1:8000"; 
         const BACKEND_URL = "https://rag-jrrq.onrender.com"; 
-        
-        // 🔴 PASTE YOUR KEY HERE 
-        const HARDCODED_API_KEY = "AIzaSyAXk9PMjsu4Y7DP7CKlGJtFKING9HF1VcU"; 
-        // Example: const HARDCODED_API_KEY = "AIzaSyD-123456789...";
+
 
         const SESSION_ID = "session-" + Math.random().toString(36).substring(2, 15);
-        
-        // ---------------------
+        let USER_API_KEY = "";
 
         const setupScreen = document.getElementById('setup-screen');
         const chatScreen = document.getElementById('chat-screen');
@@ -69,33 +72,25 @@
         const startBtn = document.getElementById('start-btn');
 
         async function handleUpload() {
+            const apiKeyInput = document.getElementById('api-key');
             const fileInput = document.getElementById('pdf-file');
 
-            // 1. Check if Key is missing in code
-            if (!HARDCODED_API_KEY || HARDCODED_API_KEY === "AIzaSy...") {
-                statusMsg.style.color = "#d93025"; 
-                statusMsg.innerText = "Error: Please paste your API Key inside the index.html code.";
+            if (!apiKeyInput.value || !fileInput.files[0]) {
+                statusMsg.style.color = "#d93025"; // Google Red
+                statusMsg.innerText = "Please provide both API Key and PDF.";
                 return;
             }
 
-            // 2. Check if File is missing
-            if (!fileInput.files[0]) {
-                statusMsg.style.color = "#d93025"; 
-                statusMsg.innerText = "Please select a PDF file.";
-                return;
-            }
-
-            statusMsg.style.color = "#1a73e8"; 
-            statusMsg.innerText = "Analyzing document... (This may take 1-2 mins)";
+            USER_API_KEY = apiKeyInput.value;
+            statusMsg.style.color = "#1a73e8"; // Google Blue
+            statusMsg.innerText = "Analyzing document...";
             startBtn.disabled = true;
             startBtn.style.opacity = "0.7";
 
             const formData = new FormData();
             formData.append("file", fileInput.files[0]);
             formData.append("session_id", SESSION_ID);
-            
-            // 3. Send the Hardcoded Key
-            formData.append("api_key", HARDCODED_API_KEY); 
+            formData.append("api_key", USER_API_KEY);
 
             try {
                 const response = await fetch(`${BACKEND_URL}/api/pdf/upload`, {
@@ -103,15 +98,11 @@
                     body: formData
                 });
 
-                if (!response.ok) throw new Error("Upload failed. Check Server Logs.");
-
-                const resData = await response.json();
-                console.log("Upload Success:", resData);
+                if (!response.ok) throw new Error("Upload failed.");
 
                 setupScreen.classList.add('hidden');
                 chatScreen.classList.remove('hidden');
             } catch (error) {
-                console.error(error);
                 statusMsg.style.color = "#d93025";
                 statusMsg.innerText = "Error: " + error.message;
                 startBtn.disabled = false;
@@ -136,7 +127,7 @@
                     body: JSON.stringify({
                         question: question,
                         session_id: SESSION_ID,
-                        api_key: HARDCODED_API_KEY // Send the hardcoded key here too
+                        api_key: USER_API_KEY
                     })
                 });
 
@@ -158,9 +149,9 @@
             const div = document.createElement('div');
             div.classList.add('message', sender === 'user' ? 'user-message' : 'bot-message');
             
+            // Format bold text for bot messages simple Markdown support (**bold**)
             if (sender === 'bot') {
-                const formatted = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                      .replace(/\n/g, '<br>');
+                const formatted = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
                 div.innerHTML = formatted;
             } else {
                 div.innerText = text;
